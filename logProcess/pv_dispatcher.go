@@ -26,7 +26,7 @@ func (p *PvDispatcher) Init(conf *goini.INI, section string) error {
     return p.DefaultDispatcher.Init(conf, section)
 }
 
-func (p *PvDispatcher) pvParse(item interface{}) {
+func (p *PvDispatcher) pvParse(item interface{}) (interface{}, error)  {
     switch item := item.(type) {
     case *Context:
         p.Lock()
@@ -41,10 +41,17 @@ func (p *PvDispatcher) pvParse(item interface{}) {
     default:
         log.Printf("Get unknown type[%T]\n", item)
     }
+
+    return item, nil
 }
 
 func (p *PvDispatcher) cleanUp() {
     for mid, pv := range p.pvMap {
         log.Printf("%s pv is %d\n", mid, pv)
     }
+}
+
+func (p *PvDispatcher) Close() {
+    p.DefaultDispatcher.Close()
+    p.cleanUp()
 }

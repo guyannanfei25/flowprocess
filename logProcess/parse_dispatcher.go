@@ -11,7 +11,7 @@ type ParseDispatcher struct {
     flowprocess.DefaultDispatcher
 }
 
-func parseline(item interface{}) {
+func parseline(item interface{}) (interface{}, error) {
     switch item := item.(type) {
     case *Context:
         fields := strings.Split(*item.raw, "\t")
@@ -22,4 +22,5 @@ func parseline(item interface{}) {
     default:
         log.Printf("Get unknown type[%T]\n", item)
     }
+    return item, nil
 }

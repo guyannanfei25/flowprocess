@@ -27,7 +27,7 @@ func (f *FilterDispatcher) Initialize(conf *goini.INI, section string) error {
     return f.Init(conf, section)
 }
 
-func (f *FilterDispatcher) filter(item interface{}) {
+func (f *FilterDispatcher) filter(item interface{}) (interface{}, error) {
     switch item := item.(type) {
     case *Context:
         f.Lock()
@@ -40,10 +40,16 @@ func (f *FilterDispatcher) filter(item interface{}) {
     default:
         log.Printf("Get unknown type[%T]\n", item)
     }
+    return item, nil
 }
 
 func (f *FilterDispatcher) cleanUp() {
     for mid, _ := range f.badMid {
         log.Printf("%s filter %s is bad mid\n", f.GetName(), mid)
     }
+}
+
+func (f *FilterDispatcher) Close() {
+    f.DefaultDispatcher.Close()
+    f.cleanUp()
 }

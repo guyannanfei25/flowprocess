@@ -3,6 +3,7 @@ package flowprocess
 import (
     "github.com/zieckey/goini"
     "fmt"
+    "sync"
     "sync/atomic"
     "time"
 )
@@ -39,7 +40,9 @@ type Dispatcher interface {
 }
 
 // 函数对象
-type Functor func(interface{})
+// 针对prefunc 返回错误则会终止后续的处理
+// 可以定制返回结果，后续操作继续操作
+type Functor func(interface{}) (interface{}, error)
 
 // type Item struct {
 // }
@@ -66,9 +69,7 @@ type DefaultDispatcher struct {
 
     // 最后处理函数
     sufFunctor         Functor
-
-    // Close之前清理函数
-    cleanUp            func()
+    wg                 sync.WaitGroup
 }
 
 func (d *DefaultDispatcher) Init(conf *goini.INI, section string) error {
@@ -103,7 +104,6 @@ func (d *DefaultDispatcher) Init(conf *goini.INI, section string) error {
 
     d.preFunctor = nil
     d.sufFunctor = nil
-    d.cleanUp    = nil
     d.running    = false
 
     return nil
@@ -134,11 +134,6 @@ func (d *DefaultDispatcher) Start() {
         }
     }
 
-    // 只管下游
-    // for up, _ := range d.upDispatchers {
-        // up.Start()
-    // }
-
     d.running = true
     fmt.Printf("%s start running!\n", d.name)
 }
@@ -156,13 +151,11 @@ func (d *DefaultDispatcher) GetName() string {
 }
 
 func (d *DefaultDispatcher) DownRegister(down Dispatcher) {
-    // d.downDispatchers = append(d.downDispatchers, down)
     d.downDispatchers[down] = 1
     down.UpRegister(d)
 }
 
 func (d *DefaultDispatcher) UpRegister(up Dispatcher) {
-    // d.upDispatchers = append(d.upDispatchers, up)
     d.upDispatchers[up] = 1
 }
 
@@ -174,11 +167,9 @@ func (d *DefaultDispatcher) SetSufFuc (sufFunctor Functor) {
     d.sufFunctor = sufFunctor
 }
 
-func (d *DefaultDispatcher) SetCleanUp (cleanUp func()) {
-    d.cleanUp = cleanUp
-}
-
 func (d *DefaultDispatcher) process(id int) {
+    d.wg.Add(1)
+    defer d.wg.Done()
     atomic.AddUint32(&d.chanCount, 1)
     fmt.Printf("%s %d th process starting...\n", d.name, id)
 
@@ -190,13 +181,23 @@ PROCESS_MAIN:
                 break PROCESS_MAIN
             }
 
+            // 经过用户业务处理之后的返回值，可以简简单单返回item自身
+            var ret interface{}
+            var err error
+
             // dispatch之前预处理函数
+            // 当需要中断处理，即不需要后续的dispatcher处理则需要返回错误
             if d.preFunctor != nil {
-                d.preFunctor(item)
+                if ret, err = d.preFunctor(item); err != nil {
+                    continue
+                }
+            } else {
+                // 如果没有设置用户自己业务，则仅仅做转发使用
+                ret = item
             }
 
             for sub, _ := range d.downDispatchers {
-                sub.Dispatch(item)
+                sub.Dispatch(ret)
             }
 
             // dispatch之后处理函数
@@ -228,21 +229,9 @@ func (d *DefaultDispatcher) Ack(result interface{}) error {
 func (d *DefaultDispatcher) Close() {
     // TODO:是否需要关闭其他的
     close(d.msgChan)
+    d.wg.Wait()
 
-    for {
-        if d.chanCount != 0 {
-            // 等待清理现场
-            time.Sleep(time.Second)
-        } else {
-            break
-        }
-    }
     d.running = false
-
-    // 首先关闭协程，因为清理工作可能会清理掉协程需要的资源
-    if d.cleanUp != nil {
-        d.cleanUp()
-    }
 
     // 关闭下游dispatcher
     for sub, _ := range d.downDispatchers {

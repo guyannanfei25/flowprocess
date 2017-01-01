@@ -39,8 +39,8 @@ func main() {
     pv.SetPreFunc(pv.pvParse)
     filter.SetPreFunc(filter.filter)
 
-    pv.SetCleanUp(pv.cleanUp)
-    filter.SetCleanUp(filter.cleanUp)
+    // pv.SetCleanUp(pv.cleanUp)
+    // filter.SetCleanUp(filter.cleanUp)
 
     parse.DownRegister(pv)
     parse.DownRegister(filter)
