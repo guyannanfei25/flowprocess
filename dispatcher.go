@@ -36,6 +36,8 @@ type Dispatcher interface {
 
     Dispatch(item interface{})
     Ack(result interface{}) error
+    // 一些定时任务，比如打印状态，更新缓存。。。
+    Tick()
     Close()
 }
 
@@ -224,6 +226,24 @@ func (d *DefaultDispatcher) Ack(result interface{}) error {
         // up.Ack()
     // }
     return nil
+}
+
+// 一些定时任务，比如打印状态，更新缓存。。。
+// 使用时建议使用一个单独协程，
+// 由首个dispatcher调用，触犯后面dispatcher链
+// framework := new(DefaultDispatcher)
+// go func(){
+    // tick := time.NewTicker(time.Duration(20) * time.Second)
+    // for {
+        // <- tick.C
+        // framework.Tick()
+    // }
+// }()
+// defer tick.Stop()
+func (d *DefaultDispatcher) Tick() {
+    for sub, _ := range d.downDispatchers {
+        sub.Tick()
+    }
 }
 
 func (d *DefaultDispatcher) Close() {
