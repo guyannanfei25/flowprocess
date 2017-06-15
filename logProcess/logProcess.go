@@ -2,38 +2,44 @@ package main
 
 import (
     "github.com/guyannanfei25/flowprocess"
-    "github.com/zieckey/goini"
+    sj  "github.com/bitly/go-simplejson"
     "fmt"
     "flag"
     "os"
     "strings"
+    "io/ioutil"
     // "time"
     "bufio"
 )
 
 var framework flowprocess.DefaultDispatcher
-var conf = flag.String("f", "conf.ini", "conf file path")
+var conf = flag.String("f", "conf.json", "conf file path")
 var logPath  = flag.String("l", "test.log", "log file path")
 
 func main() {
     flag.Parse()
-    ini, err := goini.LoadInheritedINI(*conf)
+    cData, err := ioutil.ReadFile(*conf)
 
     if err != nil {
         fmt.Fprintf(os.Stderr, "parse conf[%s] err[%v]\n", *conf, err)
         os.Exit(-1)
     }
 
-    framework.Init(ini, "")
+    ini, err := sj.NewJson(cData)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "parse conf[%s] to json err[%v]\n", *conf, err)
+        os.Exit(-1)
+    }
+
+    framework.Init(ini)
 
     parse  := new(ParseDispatcher)
     pv     := new(PvDispatcher)
     filter := new(FilterDispatcher)
 
-    parse.Init(ini, "parse_dispatcher")
-    // pv.Initialize(ini, "pv_dispatcher")
-    pv.Init(ini, "pv_dispatcher")
-    filter.Initialize(ini, "filter_dispatcher")
+    parse.Init(ini.Get("parse_dispatcher"))
+    pv.Init(ini.Get("pv_dispatcher"))
+    filter.Init(ini.Get("filter_dispatcher"))
 
     parse.SetPreFunc(parseline)
     pv.SetPreFunc(pv.pvParse)

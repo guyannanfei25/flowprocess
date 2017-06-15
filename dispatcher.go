@@ -1,21 +1,23 @@
 package flowprocess
 
 import (
-    "github.com/zieckey/goini"
+    sj  "github.com/bitly/go-simplejson"
     "fmt"
     "sync"
     "sync/atomic"
     "time"
+    "log"
+    "os"
 )
 
+// 配置文件从ini改为json，json能够更好的处理复杂的层级关系
+// http://www.guyannanfei25.site/2017/05/14/misc-talk/
 type Dispatcher interface {
-    Init(conf *goini.INI, section string) error
+    Init(conf *sj.Json) error
     SetName(name string)
     GetName() string
 
     // 只有需要级联的dispatch才需要Register接口
-    // Register(d *Dispatcher)
-
     // 注册下游dispatcher
     DownRegister(d Dispatcher)
 
@@ -36,6 +38,11 @@ type Dispatcher interface {
 
     Dispatch(item interface{})
     Ack(result interface{}) error
+
+    // 自定义logger
+    SetLogger(l logger, lvl LogLevel)
+    getLogger() (logger, LogLevel)
+
     // 一些定时任务，比如打印状态，更新缓存。。。
     Tick()
     Close()
@@ -57,6 +64,8 @@ type Functor func(interface{}) (interface{}, error)
 
 type DefaultDispatcher struct {
     name               string
+    // 保存配置，以便用户需要获取相应参数
+    Conf               *sj.Json
     // 改为map用于去重
     downDispatchers    map[Dispatcher]int
     upDispatchers      map[Dispatcher]int
@@ -72,33 +81,28 @@ type DefaultDispatcher struct {
     // 最后处理函数
     sufFunctor         Functor
     wg                 sync.WaitGroup
+    
+    // 自定义logger
+    logger             logger
+    logLvl             LogLevel
+    logGuard           sync.RWMutex
 }
 
-func (d *DefaultDispatcher) Init(conf *goini.INI, section string) error {
-    var ret bool
-    if d.concurrency, ret = conf.SectionGetInt(section, "concurrency"); !ret {
-        fmt.Println("DefaultDispatcher Get concurrency conf err")
-        return fmt.Errorf("DefaultDispatcher Get concurrency conf err")
-    }
-
+func (d *DefaultDispatcher) Init(conf *sj.Json) error {
+    d.Conf = conf
+    d.concurrency = conf.Get("concurrency").MustInt(1)
     if d.concurrency < 1 {
         d.concurrency = 1
     }
 
-    if d.msgMaxSize, ret = conf.SectionGetInt(section, "msgMaxSize"); !ret {
-        fmt.Println("DefaultDispatcher Get msgMaxSize conf err")
-        return fmt.Errorf("DefaultDispatcher Get msgMaxSize conf err")
-    }
+    d.msgMaxSize = conf.Get("msgMaxSize").MustInt(0)
 
     if d.msgMaxSize < 0 {
         d.msgMaxSize = 0 // 无缓存
     }
     d.msgChan = make(chan interface{},  d.msgMaxSize)
 
-    if d.name, ret = conf.SectionGet(section, "name"); !ret {
-        fmt.Println("DefaultDispatcher Get name conf err")
-        return fmt.Errorf("DefaultDispatcher Get name conf err")
-    }
+    d.name = conf.Get("name").MustString("DefaultName")
 
     d.downDispatchers = make(map[Dispatcher]int)
     d.upDispatchers = make(map[Dispatcher]int)
@@ -108,12 +112,15 @@ func (d *DefaultDispatcher) Init(conf *goini.INI, section string) error {
     d.sufFunctor = nil
     d.running    = false
 
+    d.logger     =  log.New(os.Stderr, "", log.Flags())
+    d.logLvl     =  LogLevelInfo
+
     return nil
 }
 
 func (d *DefaultDispatcher) Start() {
     if d.running {
-        fmt.Printf("%s is already running!\n", d.name)
+        d.logf(LogLevelInfo, " is already running!\n")
         return
     }
 
@@ -122,7 +129,7 @@ func (d *DefaultDispatcher) Start() {
     }
 
     // Make sure down and up dispatcher running
-    // TODO:是否由一个统一启动,还是自动启动自己的？？
+    // 由上一级 dispatcher 启动所有下一级
     for down, _ := range d.downDispatchers {
         down.Start()
         
@@ -137,7 +144,7 @@ func (d *DefaultDispatcher) Start() {
     }
 
     d.running = true
-    fmt.Printf("%s start running!\n", d.name)
+    d.logf(LogLevelInfo, " start running!\n")
 }
 
 func (d *DefaultDispatcher) IsRunning() bool {
@@ -150,6 +157,21 @@ func (d *DefaultDispatcher) SetName(name string) {
 
 func (d *DefaultDispatcher) GetName() string {
     return d.name
+}
+
+func (d *DefaultDispatcher) SetLogger(l logger, lvl LogLevel) {
+    d.logGuard.Lock()
+    defer d.logGuard.Unlock()
+
+    d.logger = l
+    d.logLvl = lvl
+}
+
+func (d *DefaultDispatcher) getLogger() (logger, LogLevel) {
+    d.logGuard.Lock()
+    defer d.logGuard.Unlock()
+
+    return d.logger, d.logLvl
 }
 
 func (d *DefaultDispatcher) DownRegister(down Dispatcher) {
@@ -173,7 +195,7 @@ func (d *DefaultDispatcher) process(id int) {
     d.wg.Add(1)
     defer d.wg.Done()
     atomic.AddUint32(&d.chanCount, 1)
-    fmt.Printf("%s %d th process starting...\n", d.name, id)
+    d.logf(LogLevelInfo, " %dth process starting...\n", id)
 
 PROCESS_MAIN:
     for {
@@ -209,16 +231,14 @@ PROCESS_MAIN:
         }
     }
 
-    fmt.Printf("%s %d th process quiting...\n", d.name, id)
+    d.logf(LogLevelInfo, " %dth process quiting...\n", id)
     atomic.AddUint32(&d.chanCount, ^uint32(0))
 }
 
-// func (d *DefaultDispatcher) Dispatch(item *Item) {
 func (d *DefaultDispatcher) Dispatch(item interface{}) {
     d.msgChan <- item
 }
 
-// func (d *DefaultDispatcher) Ack(result Result) error {
 func (d *DefaultDispatcher) Ack(result interface{}) error {
     // TODO:是否合理???
     // DefaultDispatcher不应该调用上游Dispatcher，应由继承者来实现
@@ -246,8 +266,21 @@ func (d *DefaultDispatcher) Tick() {
     }
 }
 
+func (d *DefaultDispatcher) logf(lvl LogLevel, line string, args ...interface{}) {
+    logger, logLvl := d.getLogger()
+
+    if logger == nil {
+        return
+    }
+
+    if logLvl > lvl {
+        return
+    }
+
+    logger.Output(2, fmt.Sprintf("[%-7s %s] %s", lvl, d.GetName(), fmt.Sprintf(line, args...)))
+}
+
 func (d *DefaultDispatcher) Close() {
-    // TODO:是否需要关闭其他的
     close(d.msgChan)
     d.wg.Wait()
 
@@ -268,5 +301,5 @@ func (d *DefaultDispatcher) Close() {
         }
     }
 
-    fmt.Printf("%s exit Success!\n", d.name)
+    d.logf(LogLevelInfo, " exit Success\n")
 }

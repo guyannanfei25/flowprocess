@@ -1,7 +1,7 @@
 package main
 
 import (
-    "github.com/zieckey/goini"
+    sj  "github.com/bitly/go-simplejson"
     "github.com/guyannanfei25/flowprocess"
     "log"
     "sync"
@@ -21,9 +21,9 @@ type PvDispatcher struct {
 // }
 
 // 或者覆盖父类初始化方法，内部调用
-func (p *PvDispatcher) Init(conf *goini.INI, section string) error {
+func (p *PvDispatcher) Init(conf *sj.Json) error {
     p.pvMap = make(map[string]int)
-    return p.DefaultDispatcher.Init(conf, section)
+    return p.DefaultDispatcher.Init(conf)
 }
 
 func (p *PvDispatcher) pvParse(item interface{}) (interface{}, error)  {

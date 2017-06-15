@@ -1,10 +1,9 @@
 package main
 
 import (
-    "github.com/zieckey/goini"
+    sj  "github.com/bitly/go-simplejson"
     "github.com/guyannanfei25/flowprocess"
     "log"
-    "fmt"
     "sync"
 )
 
@@ -15,16 +14,12 @@ type FilterDispatcher struct {
     sync.Mutex
 }
 
-func (f *FilterDispatcher) Initialize(conf *goini.INI, section string) error {
-    var ret bool
-    if f.badLevel, ret = conf.SectionGetInt(section, "badLevel"); !ret {
-        log.Printf("%s get badLevel err", f.GetName())
-        return fmt.Errorf("%s get badLevel err", f.GetName())
-    }
+func (f *FilterDispatcher) Init(conf *sj.Json) error {
+    f.badLevel = conf.Get("badLevel").MustInt(50)
 
     f.badMid = make(map[string]int)
 
-    return f.Init(conf, section)
+    return f.DefaultDispatcher.Init(conf)
 }
 
 func (f *FilterDispatcher) filter(item interface{}) (interface{}, error) {

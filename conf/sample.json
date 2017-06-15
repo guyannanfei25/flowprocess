@@ -1,0 +1,7 @@
+{
+  "framework": {
+    "name": "framework",
+    "concurrency": 3,
+    "msgMaxSize": 10
+  }
+}
