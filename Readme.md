@@ -76,3 +76,8 @@ logProcess例子展示简单的日志处理流程。
 方法1，可以灵活的控制自定义方法的执行顺序，但是对代码有侵入性
 
 方法2，对原始代码无侵入性，无法随意控制插入代码顺序
+
+7. multi_handler_dispatcher process order
+---
+
+Init  -->  RegisterHandlerCreator  -->  DownRegister  --> Start
