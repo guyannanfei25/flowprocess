@@ -8,11 +8,15 @@ import (
 
 type PvDispatcher struct {
     pvMap    map[string]int
+    id       int
     sync.Mutex
 }
 
-func (p *PvDispatcher) Init(conf *sj.Json) error {
+func (p *PvDispatcher) Init(conf *sj.Json, id int) error {
     p.pvMap = make(map[string]int)
+    p.id = id
+    log.Printf("%dth PvDispatcher init\n", id)
+
     return nil
 }
 
@@ -35,6 +39,9 @@ func (p *PvDispatcher) Process(item interface{}) (interface{}, error)  {
     return item, nil
 }
 
+func (p *PvDispatcher) Tick() {
+}
+
 func (p *PvDispatcher) cleanUp() {
     for mid, pv := range p.pvMap {
         log.Printf("%s pv is %d\n", mid, pv)
@@ -43,4 +50,5 @@ func (p *PvDispatcher) cleanUp() {
 
 func (p *PvDispatcher) Close() {
     p.cleanUp()
+    log.Printf("%dth PvDispatcher close\n", p.id)
 }

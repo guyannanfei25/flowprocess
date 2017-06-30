@@ -8,9 +8,13 @@ import (
 )
 
 type ParseDispatcher struct {
+    id               int
 }
 
-func (p *ParseDispatcher) Init(conf *sj.Json) error {
+func (p *ParseDispatcher) Init(conf *sj.Json, id int) error {
+    p.id   = id
+    log.Printf("%dth ParseDispatcher init\n", id)
+
     return nil
 }
 
@@ -28,5 +32,9 @@ func (p *ParseDispatcher) Process(item interface{}) (interface{}, error) {
     return item, nil
 }
 
+func (p *ParseDispatcher) Tick() {
+}
+
 func (p *ParseDispatcher) Close() {
+    log.Printf("%dth ParseDispatcher close\n", p.id)
 }

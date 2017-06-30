@@ -12,7 +12,7 @@ import (
     "bufio"
 )
 
-// var framework flowprocess.DefaultMultiHandlerDispatcher
+var framework flowprocess.DefaultMultiHandlerDispatcher
 var conf = flag.String("f", "conf.json", "conf file path")
 var logPath  = flag.String("l", "test.log", "log file path")
 
@@ -31,7 +31,7 @@ func main() {
         os.Exit(-1)
     }
 
-    // framework.Init(ini)
+    framework.Init(ini)
 
     parse  := new(flowprocess.DefaultMultiHandlerDispatcher)
     pv     := new(flowprocess.DefaultMultiHandlerDispatcher)
@@ -45,16 +45,13 @@ func main() {
     pv.RegisterHandlerCreator(CreatorFactory("pv"))
     filter.RegisterHandlerCreator(CreatorFactory("filter"))
 
-    // pv.SetCleanUp(pv.cleanUp)
-    // filter.SetCleanUp(filter.cleanUp)
-
     parse.DownRegister(pv)
     parse.DownRegister(filter)
 
-    parse.Start()
-    // framework.DownRegister(parse)
+    // parse.Start()
+    framework.DownRegister(parse)
 
-    // framework.Start()
+    framework.Start()
 
 
     // 业务逻辑
@@ -75,10 +72,10 @@ func main() {
         fmt.Printf("Process line[%s]\n", line)
         item := new(Context)
         item.raw = &line
-        // framework.Dispatch(item)
-        parse.Dispatch(item)
+        framework.Dispatch(item)
+        // parse.Dispatch(item)
     }
 
-    // framework.Close()
-    parse.Close()
+    framework.Close()
+    // parse.Close()
 }

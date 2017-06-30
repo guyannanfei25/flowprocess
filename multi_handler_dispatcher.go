@@ -52,8 +52,10 @@ type MultiHandlerDispatcher interface {
 }
 
 type Handler interface {
-    Init(conf *sj.Json) error
+    // id for record which goroutine it stays
+    Init(conf *sj.Json, id int) error
     Process(interface{}) (interface{}, error)
+    Tick()
     Close()
 }
 
@@ -74,6 +76,7 @@ type DefaultMultiHandlerDispatcher struct {
 
     // handler生成函数
     creator            HandlerCreator
+    handlers           []Handler
 
     wg                 sync.WaitGroup
     
@@ -100,8 +103,9 @@ func (d *DefaultMultiHandlerDispatcher) Init(conf *sj.Json) error {
     d.name = conf.Get("name").MustString("DefaultMultiHandlerDispatcher")
 
     d.downDispatchers = make(map[MultiHandlerDispatcher]int)
-    d.upDispatchers = make(map[MultiHandlerDispatcher]int)
-    d.chanCount     = 0
+    d.upDispatchers   = make(map[MultiHandlerDispatcher]int)
+    d.handlers        = make([]Handler, d.concurrency)
+    d.chanCount       = 0
 
     d.creator    = nil
     d.running    = false
@@ -177,11 +181,8 @@ func (d *DefaultMultiHandlerDispatcher) UpRegister(up MultiHandlerDispatcher) {
     d.upDispatchers[up] = 1
 }
 
+// allow creator == nil, this MultiHandlerDispatcher use just for forward
 func (d *DefaultMultiHandlerDispatcher) RegisterHandlerCreator (c HandlerCreator) {
-    if c == nil {
-        d.logf(LogLevelFatal, "%s get nil handle creator\n", d.name)
-    }
-    d.logf(LogLevelDebug, "%s get handler creator[%#v]\n", c)
     d.creator = c
 }
 
@@ -189,14 +190,19 @@ func (d *DefaultMultiHandlerDispatcher) process(id int) {
     d.wg.Add(1)
     defer d.wg.Done()
     atomic.AddUint32(&d.chanCount, 1)
-    // 每个工作协程一个handler对象，可以不用考虑多协程不安全问题
-    innerHandler := d.creator()
 
-    // init handler, if err then panic
-    if err := innerHandler.Init(d.Conf); err != nil {
-        d.logf(LogLevelFatal, "%s %dth handler init err[%s]\n", d.name, id, err)
+    var innerHandler Handler
+    if d.creator != nil {
+        // 每个工作协程一个handler对象，可以不用考虑多协程不安全问题
+        innerHandler = d.creator()
+        d.handlers[id] = innerHandler
+
+        // init handler, if err then panic
+        if err := innerHandler.Init(d.Conf, id); err != nil {
+            d.logf(LogLevelFatal, "%s %dth handler init err[%s]\n", d.name, id, err)
+        }
+        defer innerHandler.Close()
     }
-    defer innerHandler.Close()
 
     d.logf(LogLevelInfo, " %dth process starting...\n", id)
 
@@ -212,13 +218,18 @@ PROCESS_MAIN:
             var ret interface{}
             var err error
 
-            // handler handle item, if no need to pass down and no err happen just return ERRNONEEDPASSDOWN
-            if ret, err = innerHandler.Process(item); err != nil {
-                if err != ERRNONEEDPASSDOWN {
-                    d.logf(LogLevelError, "%s %dth process item[%v] err[%s]\n", 
-                        d.name, id, item, err)
+            if d.creator != nil {
+                // handler handle item, if no need to pass down and no err happen just return ERRNONEEDPASSDOWN
+                if ret, err = innerHandler.Process(item); err != nil {
+                    if err != ERRNONEEDPASSDOWN {
+                        d.logf(LogLevelError, "%s %dth process item[%v] err[%s]\n", 
+                            d.name, id, item, err)
+                    }
+                    continue
                 }
-                continue
+            } else {
+                // just for forward
+                ret = item
             }
 
             for sub, _ := range d.downDispatchers {
@@ -257,6 +268,11 @@ func (d *DefaultMultiHandlerDispatcher) Ack(result interface{}) error {
 // }()
 // defer tick.Stop()
 func (d *DefaultMultiHandlerDispatcher) Tick() {
+    // call every handler Tick
+    for _, h := range d.handlers {
+        h.Tick()
+    }
+
     for sub, _ := range d.downDispatchers {
         sub.Tick()
     }

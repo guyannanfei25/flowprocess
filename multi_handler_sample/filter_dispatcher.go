@@ -9,13 +9,16 @@ import (
 type FilterDispatcher struct {
     badMid    map[string]int
     badLevel  int
+    id        int
     sync.Mutex
 }
 
-func (f *FilterDispatcher) Init(conf *sj.Json) error {
+func (f *FilterDispatcher) Init(conf *sj.Json, id int) error {
     f.badLevel = conf.Get("badLevel").MustInt(50)
 
     f.badMid = make(map[string]int)
+    f.id = id
+    log.Printf("%dth FilterDispatcher init\n", id)
 
     return nil
 }
@@ -42,6 +45,10 @@ func (f *FilterDispatcher) cleanUp() {
     }
 }
 
+func (f *FilterDispatcher) Tick() {
+}
+
 func (f *FilterDispatcher) Close() {
     f.cleanUp()
+    log.Printf("%dth FilterDispatcher close\n", f.id)
 }
