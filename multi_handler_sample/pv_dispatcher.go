@@ -1,7 +1,7 @@
 package main
 
 import (
-    sj  "github.com/bitly/go-simplejson"
+    sj  "github.com/guyannanfei25/go-simplejson"
     "log"
     "sync"
 )

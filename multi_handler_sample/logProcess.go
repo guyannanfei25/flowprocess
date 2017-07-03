@@ -2,7 +2,7 @@ package main
 
 import (
     "github.com/guyannanfei25/flowprocess"
-    sj  "github.com/bitly/go-simplejson"
+    sj  "github.com/guyannanfei25/go-simplejson"
     "fmt"
     "flag"
     "os"

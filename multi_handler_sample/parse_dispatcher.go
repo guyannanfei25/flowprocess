@@ -4,7 +4,7 @@ import (
     "log"
     "strings"
     "strconv"
-    sj  "github.com/bitly/go-simplejson"
+    sj  "github.com/guyannanfei25/go-simplejson"
 )
 
 type ParseDispatcher struct {

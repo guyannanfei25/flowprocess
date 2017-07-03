@@ -1,7 +1,7 @@
 package flowprocess
 
 import (
-    sj  "github.com/bitly/go-simplejson"
+    sj  "github.com/guyannanfei25/go-simplejson"
     "fmt"
     "sync"
     "sync/atomic"

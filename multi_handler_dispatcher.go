@@ -1,7 +1,7 @@
 package flowprocess
 
 import (
-    sj  "github.com/bitly/go-simplejson"
+    sj  "github.com/guyannanfei25/go-simplejson"
     "fmt"
     "sync"
     "sync/atomic"
@@ -269,8 +269,10 @@ func (d *DefaultMultiHandlerDispatcher) Ack(result interface{}) error {
 // defer tick.Stop()
 func (d *DefaultMultiHandlerDispatcher) Tick() {
     // call every handler Tick
-    for _, h := range d.handlers {
-        h.Tick()
+    if d.creator != nil {
+        for _, h := range d.handlers {
+            h.Tick()
+        }
     }
 
     for sub, _ := range d.downDispatchers {
