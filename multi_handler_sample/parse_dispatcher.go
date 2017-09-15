@@ -35,6 +35,7 @@ func (p *ParseDispatcher) Process(item interface{}) (interface{}, error) {
 func (p *ParseDispatcher) Tick() {
 }
 
-func (p *ParseDispatcher) Close() {
+func (p *ParseDispatcher) Close() error {
     log.Printf("%dth ParseDispatcher close\n", p.id)
+    return nil
 }

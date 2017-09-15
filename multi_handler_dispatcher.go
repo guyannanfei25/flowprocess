@@ -56,7 +56,7 @@ type Handler interface {
     Init(conf *sj.Json, id int) error
     Process(interface{}) (interface{}, error)
     Tick()
-    Close()
+    Close() error
 }
 
 type HandlerCreator func() Handler
@@ -73,6 +73,8 @@ type DefaultMultiHandlerDispatcher struct {
     concurrency        int // 并发执行数
     chanCount          uint32 // 当前协程数
     running            bool // 是否正在运行
+
+    cmdChans           []chan struct{} // 目前仅仅发送 tick 命令
 
     // handler生成函数
     creator            HandlerCreator
@@ -99,6 +101,7 @@ func (d *DefaultMultiHandlerDispatcher) Init(conf *sj.Json) error {
         d.msgMaxSize = 0 // 无缓存
     }
     d.msgChan = make(chan interface{},  d.msgMaxSize)
+    d.cmdChans = make([]chan struct{}, d.concurrency)
 
     d.name = conf.Get("name").MustString("DefaultMultiHandlerDispatcher")
 
@@ -204,6 +207,9 @@ func (d *DefaultMultiHandlerDispatcher) process(id int) {
         defer innerHandler.Close()
     }
 
+    // init cmd chan
+    d.cmdChans[id] = make(chan struct{}, 10)
+
     d.logf(LogLevelInfo, " %dth process starting...\n", id)
 
 PROCESS_MAIN:
@@ -234,6 +240,12 @@ PROCESS_MAIN:
 
             for sub, _ := range d.downDispatchers {
                 sub.Dispatch(ret)
+            }
+
+        // 防止并发调用 Tick() 函数，与单线程初衷违背
+        case <- d.cmdChans[id]:
+            if innerHandler != nil {
+                innerHandler.Tick()
             }
         }
     }
@@ -269,10 +281,13 @@ func (d *DefaultMultiHandlerDispatcher) Ack(result interface{}) error {
 // defer tick.Stop()
 func (d *DefaultMultiHandlerDispatcher) Tick() {
     // call every handler Tick
-    if d.creator != nil {
-        for _, h := range d.handlers {
-            h.Tick()
-        }
+    // if d.creator != nil {
+        // for _, h := range d.handlers {
+            // h.Tick()
+        // }
+    // }
+    for _, cmdChan := range d.cmdChans {
+        cmdChan <- struct{}{}
     }
 
     for sub, _ := range d.downDispatchers {

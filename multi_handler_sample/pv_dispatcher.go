@@ -48,7 +48,8 @@ func (p *PvDispatcher) cleanUp() {
     }
 }
 
-func (p *PvDispatcher) Close() {
+func (p *PvDispatcher) Close() error {
     p.cleanUp()
     log.Printf("%dth PvDispatcher close\n", p.id)
+    return nil
 }

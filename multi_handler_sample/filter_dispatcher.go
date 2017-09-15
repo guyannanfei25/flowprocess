@@ -48,7 +48,9 @@ func (f *FilterDispatcher) cleanUp() {
 func (f *FilterDispatcher) Tick() {
 }
 
-func (f *FilterDispatcher) Close() {
+func (f *FilterDispatcher) Close() error {
     f.cleanUp()
     log.Printf("%dth FilterDispatcher close\n", f.id)
+
+    return nil
 }
